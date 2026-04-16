@@ -6,6 +6,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gamma, poisson
 from scipy.signal import find_peaks
+from scipy.stats import chisquare
+
+# masking logic
+def chisq_poisson(observed_counts, map_lam, n_days):
+    k = np.arange(0, len(observed_counts))
+    expected = poisson.pmf(k, map_lam) * n_days
+
+    # Merge bins from the right until all expected >= 5
+    while len(expected) > 1 and expected[-1] < 5:
+        expected[-2] += expected[-1]
+        observed_counts[-2] += observed_counts[-1]
+        expected = expected[:-1]
+        observed_counts = observed_counts[:-1]
+
+    # Also merge from the left
+    while len(expected) > 1 and expected[0] < 5:
+        expected[1] += expected[0]
+        observed_counts[1] += observed_counts[0]
+        expected = expected[1:]
+        observed_counts = observed_counts[1:]
+
+    stat, pval = chisquare(observed_counts, f_exp=expected)
+    return stat, pval
 
 ### Data Set 
 # load dataset
@@ -49,7 +72,6 @@ print(f"Average observed flares per day:  {mean_daily:.3f}")
 ### Numerical Simulation
 
 # Simulated Data
-# lambda_fake = 5 # Flares per Day
 rng = np.random.default_rng() #generate a random number
 lambda_true = rng.uniform(1, 15) #secret lambda
 print(f"Secret lambda: {lambda_true:.3f}") 
@@ -82,11 +104,12 @@ mean = np.mean(samples)
 variance = np.var(samples)
 print(f"Simulated Data Mean: {mean:.3f} Simulated Data Variance: {variance:.3f}")
 
+### Total (2010-2018)
 # Inferencing
 # Prior is gamma
 lambda_values = np.linspace(0.01, 20, 2000)
 
-alpha = 10
+alpha = 10 #picked these from our preliminary research
 beta = 1
 scale = 1 / beta
 
@@ -116,9 +139,8 @@ plt.title('Posterior Distribution')
 plt.legend()
 plt.show()
 
-lambda_values = np.linspace(0.01, 20, 2000)
-
-#Same prior as before
+### Yearly 
+# Same prior as before
 alpha, beta = 10, 1
 gamma_prior = gamma.pdf(lambda_values, a=alpha, scale=1/beta)
 
@@ -172,18 +194,22 @@ for i, year in enumerate(years_subset):
     year_data = daily_counts[daily_counts.index.year == year]
     map_lam = yearly_map[year]
 
+    observed = np.bincount(year_data.values.astype(int), minlength=len(k))
+    stat, pval = chisq_poisson(observed.copy(), map_lam, len(year_data))
+
     axes[i].hist(year_data, bins=np.arange(-0.5, 30.5, 1), density=True, alpha=0.6, label='Data')
     axes[i].plot(k, poisson.pmf(k, map_lam), marker='.', color='r', label=f'MAP λ={map_lam:.2f}')
     axes[i].set_title(f'{year}')
     axes[i].set_xlabel('Flares/day')
     axes[i].set_ylabel('Probability')
+    axes[i].plot([],[], ' ', label=f'p = {pval:.6f}')
     axes[i].legend(fontsize=6)
 
 plt.suptitle('Per-Year Poisson Fit vs Data (2010–2018)', fontsize=14)
 plt.tight_layout()
 plt.show()
 
-# Monthly
+### Monthly
 year_focus = 2014
 monthly = daily_counts[daily_counts.index.year == year_focus].groupby(daily_counts.index[daily_counts.index.year == year_focus].month)
 
@@ -202,11 +228,15 @@ for i, (month, group) in enumerate(monthly):
     post /= np.trapezoid(post, lambda_values)
     map_lam = lambda_values[np.argmax(post)]
 
+    observed = np.bincount(group.values.astype(int), minlength=len(k))
+    stat, pval = chisq_poisson(observed.copy(), map_lam, data_size)
+
     axes[i].hist(group, bins=np.arange(-0.5, 30.5, 1), density=True, alpha=0.6, label='Data')
     axes[i].plot(k, poisson.pmf(k, map_lam), marker='.', color='r', label=f'MAP λ={map_lam:.2f}')
     axes[i].set_title(f'Month {month}')
     axes[i].set_xlabel('Flares/day')
     axes[i].set_ylabel('Probability')
+    axes[i].plot([],[], ' ', label=f'p = {pval:.6f}')
     axes[i].legend(fontsize=6)
 
 plt.suptitle(f'Monthly Poisson Fit vs Data ({year_focus})', fontsize=14)
@@ -248,6 +278,7 @@ plt.show()
 ### Real Data Calculation
 # Likelihood
 data_count = np.bincount(daily_counts, minlength = 20) 
+
 data_size = np.size(daily_counts)
 data_sum = sum(daily_counts)
 flares_log_likelihood = -data_size * lambda_values + data_sum * np.log(lambda_values)
@@ -263,6 +294,10 @@ flares_posterior = flares_posterior_product / flares_normalization
 flares_peak_lambda = lambda_values[np.argmax(flares_posterior)]
 print(f'Lambda after Bayesian Inference: {flares_peak_lambda:.3f}')
 
+observed = np.bincount(daily_counts.values.astype(int), minlength=len(k))
+stat, pval = chisq_poisson(observed.copy(), flares_peak_lambda, len(daily_counts))
+
+print(f"Real Data: chi2 = {stat:.3f}, p-value = {pval:.3f}")
 
 # Final Check: 
 final_distribution = poisson.pmf(k, flares_peak_lambda)
@@ -275,10 +310,3 @@ plt.ylabel('Probability')
 plt.legend()
 plt.show()
 
-
-# MLE
-# mean_daily
-
-# time-varying stuff
-
-# p value
