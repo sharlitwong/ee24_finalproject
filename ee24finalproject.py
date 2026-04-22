@@ -8,6 +8,46 @@ from scipy.stats import gamma, poisson
 from scipy.signal import find_peaks
 from scipy.stats import chisquare
 
+def run_inference(lambda_true, lambda_values, gamma_prior, sample_size=10000):
+    samples = rng.poisson(lam=lambda_true, size=sample_size)
+    sum_samples = np.sum(samples)
+    log_likelihood = -sample_size * lambda_values + sum_samples * np.log(lambda_values)
+    likelihood = np.exp(log_likelihood - np.max(log_likelihood))
+    posterior_product = gamma_prior * likelihood
+    normalization = np.trapezoid(posterior_product, lambda_values)
+    gamma_posterior = posterior_product / normalization
+    map_estimate = lambda_values[np.argmax(gamma_posterior)]
+    return map_estimate
+
+def validate_inference(lambda_values, gamma_prior, n_trials=200):
+    test_lambdas = np.linspace(1, 15, n_trials)
+    map_estimates = [run_inference(lam, lambda_values, gamma_prior) for lam in test_lambdas]
+    errors = np.array(map_estimates) - test_lambdas
+    
+    print(f"Mean error (bias): {np.mean(errors):.4f}")
+    print(f"Mean absolute error: {np.mean(np.abs(errors)):.4f}")
+    print(f"Max absolute error: {np.max(np.abs(errors)):.4f}")
+    
+    plt.figure(figsize=(10, 4))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(test_lambdas, map_estimates, label='MAP estimate')
+    plt.plot(test_lambdas, test_lambdas, 'r--', label='Perfect recovery')
+    plt.xlabel('True λ')
+    plt.ylabel('MAP estimate')
+    plt.title('Recovery Accuracy')
+    plt.legend()
+    
+    plt.subplot(1, 2, 2)
+    plt.plot(test_lambdas, errors)
+    plt.axhline(0, color='r', linestyle='--')
+    plt.xlabel('True λ')
+    plt.ylabel('MAP - True λ')
+    plt.title('Estimation Error')
+    
+    plt.tight_layout()
+    plt.show()
+
 # masking logic
 def chisq_poisson(observed_counts, map_lam, n_days):
     k = np.arange(0, len(observed_counts))
@@ -118,7 +158,7 @@ prior_mean = alpha / beta
 prior_var = alpha / (beta ** 2)
 print(f"Prior Mean: {prior_mean}\nPrior Variance: {prior_var}" )
 
-# Likelihood (poisson)
+# # Likelihood (poisson)
 sum_samples = np.sum(samples)
 log_likelihood = -sample_size * lambda_values + sum_samples * np.log(lambda_values)
 likelihood = np.exp(log_likelihood - np.max(log_likelihood))
@@ -129,6 +169,7 @@ normalization = np.trapezoid(posterior_product, lambda_values) #normalization fa
 gamma_posterior = posterior_product / normalization 
 
 peak_lambda = lambda_values[np.argmax(gamma_posterior)]
+peak_lambda = run_inference(lambda_true, lambda_values, gamma_prior)
 
 plt.figure()
 plt.plot(lambda_values, gamma_posterior, label = 'Posterior')
@@ -138,6 +179,8 @@ plt.xlabel('lambda')
 plt.title('Posterior Distribution')
 plt.legend()
 plt.show()
+
+validate_inference(lambda_values, gamma_prior, n_trials=200)
 
 ### Yearly 
 # Same prior as before
