@@ -8,6 +8,7 @@ from scipy.stats import gamma, poisson
 from scipy.signal import find_peaks
 from scipy.stats import chisquare
 
+
 def run_inference(lambda_true, lambda_values, gamma_prior, sample_size=10000):
     samples = rng.poisson(lam=lambda_true, size=sample_size)
     sum_samples = np.sum(samples)
@@ -81,6 +82,10 @@ df["date"] = df["start_time"].dt.date
 daily_counts = df.groupby("date").size()
 full_date_range = pd.date_range(daily_counts.index.min(), daily_counts.index.max())
 daily_counts = daily_counts.reindex(full_date_range, fill_value=0)
+
+# df["start_time"] = pd.to_datetime(df["start_time"])
+# df["year_month"] = df["start_time"].dt.to_period("M")
+# print(df.groupby("year_month").size().to_string())
 
 year_data = daily_counts.groupby(daily_counts.index.year).mean()
 plt.figure()
@@ -258,6 +263,7 @@ monthly = daily_counts[daily_counts.index.year == year_focus].groupby(daily_coun
 
 fig, axes = plt.subplots(3, 4, figsize=(16, 9))
 axes = axes.flatten()
+# k = np.arange(0, 30)
 k = np.arange(0, 30)
 
 for i, (month, group) in enumerate(monthly):
